@@ -18,7 +18,7 @@ import torch
 
 # Import your existing utility functions
 from audio_utils import transcribe_audio, text_to_speech, load_tts_model, StreamingTTSManager
-from llm_utils import get_llm_response
+from llm_utils import get_llm_response, stream_llm_response
 from embedding import load_rag_retriver, get_context_from_rag
 
 app = FastAPI(title="EmpathAI Voice Chatbot API")
@@ -136,7 +136,7 @@ async def chat_endpoint(
 
         # Get LLM response (non-streaming for this endpoint)
         start_time = time.time()
-        ai_response = get_llm_response(text, stream=False, context=context)
+        ai_response = get_llm_response(text, context=context)
         response_time = time.time() - start_time
 
         # Add assistant message to session history
@@ -222,7 +222,7 @@ async def voice_chat_endpoint(
             context = get_context_from_rag(rag_retriever, transcription)
 
         # Get LLM response
-        ai_response = get_llm_response(transcription, stream=False, context=context)
+        ai_response = get_llm_response(transcription, context=context)
 
         # Generate TTS audio response
         tts_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -312,7 +312,7 @@ async def stream_voice_chat(
         # Function to process audio in the background
         async def process_audio_stream():
             # Get streaming response from LLM
-            response_generator = get_llm_response(transcription, stream=True, context=context)
+            response_generator = stream_llm_response(transcription, context=context)
 
             import re
 

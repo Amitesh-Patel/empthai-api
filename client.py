@@ -222,8 +222,8 @@ if __name__ == "__main__":
     client = EmpathAIClient()
 
     # Example 1: Text chat
-    # response = client.chat("Hello, how are you today?")
-    # print(f"AI: {response['response']}")
+    response = client.chat("Hello, how are you today?")
+    print(f"AI: {response['response']}")
 
     # # Example 2: Voice chat
     # result = client.voice_chat("recording.wav")
@@ -232,10 +232,10 @@ if __name__ == "__main__":
     # print(f"Audio saved to: {result['audio_file']}")
 
     # Example 3: Streaming voice chat
-    client.start_streaming_voice_chat("assists/test.wav")
-    print("Streaming started... press Enter to stop")
-    input()
-    client.stop_streaming()
+    # client.start_streaming_voice_chat("assists/test.wav")
+    # print("Streaming started... press Enter to stop")
+    # input()
+    # client.stop_streaming()
 
     # Get chat history
     history = client.get_history()

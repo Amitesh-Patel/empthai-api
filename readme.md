@@ -64,6 +64,39 @@ EmpathAI is an advanced voice chatbot API that provides seamless speech-to-text 
      pip install kokoro
      ```
 
+Of course! Here’s how you could format that as a clear and professional README section:
+
+---
+
+5. Install Chocolatey (Windows Users Only)
+
+**Chocolatey** is a package manager for Windows that simplifies the installation and management of software.
+
+#### Installation Instructions
+
+1. Open **PowerShell** as an administrator.
+2. Run the following command to install Chocolatey:
+
+   ```powershell
+   Set-ExecutionPolicy Bypass -Scope Process -Force; `
+   [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; `
+   iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+   ```
+
+3. After installation, verify that Chocolatey was installed successfully by running:
+
+   ```bash
+   choco --version
+   ```
+
+You should see the version number of Chocolatey if the installation was successful.
+
+macOS: `brew install ffmpeg`
+Linux (Ubuntu/Debian): `sudo apt update` && `sudo apt install ffmpeg`
+Verify installation: `ffmpeg -version`
+
+---
+
 5. RAG Files Setup (Do if you do not download RAG files will be created on thier own and creating them again will take time.)
 
   Create a rag_files folder:
