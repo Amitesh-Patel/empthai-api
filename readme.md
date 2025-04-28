@@ -63,6 +63,16 @@ EmpathAI is an advanced voice chatbot API that provides seamless speech-to-text 
      pip install kokoro
      ```
 
+5. RAG Files Setup (Do if you do not download RAG files will be created on thier own and creating them again will take time.)
+
+  Create a rag_files folder:
+
+      ```bash
+      mkdir rag_files
+      ```
+  Download your documents form this [Drive Link](https://drive.google.com/drive/folders/15yBHWiIojsF-QRZ3cy0b5Zqd7E7tDWrE?usp=drive_link):
+
+
 ### Environment Variables
 
 Create a `.env` file in the project root with the following variables:

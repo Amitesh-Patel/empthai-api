@@ -6,9 +6,9 @@ import re
 import os
 
 # File paths for persistence
-EMBEDDING_FILE = "rag_file/assistant_embeddings.npy"
-FAISS_INDEX_FILE = "rag_file/faiss_index.index"
-TEXTS_FILE = "rag_file/assistant_texts.npy"
+EMBEDDING_FILE = "rag_files/assistant_embeddings.npy"
+FAISS_INDEX_FILE = "rag_files/faiss_index.index"
+TEXTS_FILE = "rag_files/assistant_texts.npy"
 
 
 # --- Load & preprocess datasets ---
