@@ -1,0 +1,9 @@
+sounddevice
+soundfile
+openai-whisper
+google-generativeai
+streamlit
+pyrubberband 
+datasets 
+sentence-transformers 
+faiss-cpu
