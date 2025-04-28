@@ -2,3 +2,5 @@ rag_files
 venv
 __pycache__
 .env
+*.ipynb 
+temp_api_recordings

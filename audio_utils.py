@@ -1,7 +1,13 @@
 import os
 import soundfile as sf
 from datetime import datetime
-from TTS.api import TTS
+
+try:
+    from TTS.api import TTS
+
+    TTS_AVAILABLE = True
+except ImportError:
+    TTS_AVAILABLE = False
 from config import TTS_MODEL_NAME, SAMPLE_RATE, TEMP_DIR
 import whisper
 import numpy as np
@@ -43,6 +49,9 @@ class CoquiTTSProvider(TTSProvider):
         self.sample_rate = SAMPLE_RATE
 
     def load_model(self):
+        if not TTS_AVAILABLE:
+            raise ImportError("Coqui TTS is not available. Please install it first.")
+
         if self.model is None:
             self.model = TTS(self.model_name, gpu=self.gpu)
         return self.model
@@ -64,7 +73,7 @@ class CoquiTTSProvider(TTSProvider):
 
 # Kokoro TTS Provider
 class KokoroTTSProvider(TTSProvider):
-    def __init__(self, lang_code="a", device="cuda", voice="af_heart"):
+    def __init__(self, lang_code="a", device="cpu", voice="af_heart"):
         super().__init__()
         self.lang_code = lang_code
         self.device = device

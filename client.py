@@ -232,7 +232,7 @@ if __name__ == "__main__":
     # print(f"Audio saved to: {result['audio_file']}")
 
     # Example 3: Streaming voice chat
-    client.start_streaming_voice_chat("test.wav")
+    client.start_streaming_voice_chat("assists/test.wav")
     print("Streaming started... press Enter to stop")
     input()
     client.stop_streaming()

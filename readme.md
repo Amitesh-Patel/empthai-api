@@ -17,6 +17,7 @@ EmpathAI is an advanced voice chatbot API that provides seamless speech-to-text 
   - [Setup](#setup)
   - [Environment Variables](#environment-variables)
 - [Quick Start](#quick-start)
+- [Directory Structure](#directory-structure)
 - [API Documentation](#api-documentation)
   - [Endpoints](#endpoints)
   - [Session Management](#session-management)
@@ -86,17 +87,48 @@ TEMP_DIR=./temp_audio_files
 
 ## Quick Start
 
-1. Start the FastAPI server:
+1. Start the FastAPI server using the run_api.py script:
    ```bash
-   uvicorn main:app --reload --host 0.0.0.0 --port 8000
+   python run_api.py
    ```
+   
+   Additional command-line options:
+   - `--reload`: Enable auto-reload for development
+   - `--debug`: Enable debug mode
+   - `--host`: Specify the host address (default: 0.0.0.0)
+   - `--port`: Specify the port number (default: 8000)
 
 2. Access the API documentation at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-3. Test a simple voice interaction:
-   - Record an audio question
-   - Send it to `/api/voice_chat` endpoint
-   - Receive the AI response as audio and text
+3. Use the client.py to interact with the API:
+   ```bash
+   python client.py
+   ```
+
+## Directory Structure
+
+```
+EMPTHAI-API/
+├── __pycache__/
+├── assists/                   # Helper audio files for testing
+├── rag_files/                 # RAG document storage
+├── temp_api_recordings/       # Temporary audio recordings
+├── venv/                      # Virtual environment
+├── .env                       # Environment variables
+├── .gitignore
+├── audio_processor.py         # Audio processing utilities
+├── audio_utils.py             # Audio helper functions
+├── client.py                  # Client for API interaction
+├── config.py                  # Configuration settings
+├── embedding.py               # Vector embedding utilities for RAG
+├── llm_utils.py               # LLM integration utilities
+├── main.py                    # Main FastAPI application
+├── readme.md                  # This documentation
+├── requirements.txt           # Project dependencies
+├── run_api.py                 # API server runner
+├── session_utils.py           # Session management utilities
+└── test.ipynb                 # Testing notebook
+```
 
 ## API Documentation
 
@@ -180,72 +212,36 @@ Session data includes:
 
 ## Example Usage
 
-### Python Client Example
+### Using client.py
+
+The project includes a Python client (`client.py`) that makes it easy to interact with the API:
 
 ```python
-import requests
-import json
-import base64
-import time
-import sounddevice as sd
-import soundfile as sf
-import io
+from client import EmpathAIClient
 
-BASE_URL = "http://localhost:8000"
+# Initialize the client
+client = EmpathAIClient()
 
-# Start a voice chat session
-def start_voice_chat(audio_file_path):
-    with open(audio_file_path, "rb") as audio_file:
-        files = {"audio": ("recording.wav", audio_file, "audio/wav")}
-        response = requests.post(
-            f"{BASE_URL}/api/stream_voice_chat", 
-            files=files
-        )
-    
-    if response.status_code == 200:
-        data = response.json()
-        return data["session_id"]
-    else:
-        print(f"Error: {response.status_code}")
-        return None
+# Example: Text chat
+response = client.chat("Hello, how are you today?")
+print(f"AI: {response['response']}")
 
-# Get and play audio chunks
-def get_and_play_audio_chunks(session_id):
-    is_processing = True
-    response_text = ""
-    
-    while is_processing:
-        response = requests.get(
-            f"{BASE_URL}/api/get_audio_chunks",
-            params={"session_id": session_id}
-        )
-        
-        data = response.json()
-        chunks = data.get("chunks_data", [])
-        
-        # Play each audio chunk
-        for chunk_b64 in chunks:
-            chunk_data = base64.b64decode(chunk_b64)
-            audio_data, samplerate = sf.read(io.BytesIO(chunk_data))
-            sd.play(audio_data, samplerate)
-            sd.wait()
-        
-        # Update processing status and response text
-        is_processing = data.get("is_processing", False)
-        response_text = data.get("response_so_far", "")
-        print(f"Response so far: {response_text}")
-        
-        # Wait a bit before checking for more chunks
-        if is_processing:
-            time.sleep(0.5)
-    
-    return response_text
+# Example: Voice chat
+result = client.voice_chat("recording.wav")
+print(f"Transcription: {result['transcription']}")
+print(f"AI Response: {result['response_text']}")
+print(f"Audio saved to: {result['audio_file']}")
 
-# Example usage
-session_id = start_voice_chat("my_question.wav")
-if session_id:
-    final_response = get_and_play_audio_chunks(session_id)
-    print(f"Final response: {final_response}")
+# Example: Streaming voice chat
+client.start_streaming_voice_chat("recording.wav")
+print("Streaming started... press Enter to stop")
+input()  # Wait for user to press Enter
+client.stop_streaming()
+
+# Get chat history
+history = client.get_history()
+for msg in history["messages"]:
+    print(f"{msg['role']}: {msg['content']}")
 ```
 
 ### cURL Example

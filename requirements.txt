@@ -7,3 +7,8 @@ pyrubberband
 datasets 
 sentence-transformers 
 faiss-cpu
+fastapi
+uvicorn 
+pydub
+python-dotenv
+pyaudio
