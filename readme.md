@@ -64,8 +64,6 @@ EmpathAI is an advanced voice chatbot API that provides seamless speech-to-text 
      pip install kokoro
      ```
 
-Of course! Here’s how you could format that as a clear and professional README section:
-
 ---
 
 5. Install Chocolatey (Windows Users Only)
