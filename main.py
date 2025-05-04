@@ -41,6 +41,14 @@ if not os.path.exists(TEMP_DIR):
 tts_model = load_tts_model()
 rag_retriever = load_rag_retriver()
 
+from pydantic import BaseModel
+
+
+class AudioRequest(BaseModel):
+    text: str
+    session_id: str = None
+
+
 # Store active streams
 active_sessions = {}
 
@@ -153,11 +161,14 @@ async def chat_endpoint(
 
 
 @app.post("/api/audio_response")
-async def audio_response_endpoint(text: str, session_id: str = None):
+async def audio_response_endpoint(request: AudioRequest):
     """
     Generate TTS audio from text.
     """
+    text = request.text
+    session_id = request.session_id
     try:
+        print(f"Generating audio for text: {text}")
         # Create temp file for audio
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         audio_path = os.path.join(TEMP_DIR, f"{timestamp}_response.wav")
