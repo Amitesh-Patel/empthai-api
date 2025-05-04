@@ -11,4 +11,5 @@ fastapi
 uvicorn 
 pydub
 python-dotenv
-pyaudio
+# pyaudio
+kokoro
