@@ -13,3 +13,4 @@ pydub
 python-dotenv
 # pyaudio
 kokoro
+gdown

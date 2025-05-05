@@ -89,6 +89,30 @@ class RAGRetriever:
         return [self.texts[i] for i in I[0]]
 
 
+import gdown
+
+# Your Google Drive folder ID
+DRIVE_FOLDER_ID = "15yBHWiIojsF-QRZ3cy0b5Zqd7E7tDWrE"
+
+
+def download_drive_folder(folder_id: str, download_path: str):
+    """
+    Downloads all files from a Google Drive folder using gdown.
+
+    Args:
+        folder_id (str): The ID of the Google Drive folder.
+        download_path (str): Local path to store the downloaded files.
+    """
+    if not os.path.exists(download_path):
+        os.makedirs(download_path)
+        print(f"📁 Created download directory: {download_path}")
+
+    # Construct URL for gdown
+    url = f"https://drive.google.com/drive/folders/{folder_id}"
+    gdown.download_folder(url=url, output=download_path, quiet=False, use_cookies=False)
+    print(f"✅ Download complete. Files stored in: {download_path}")
+
+
 def load_rag_retriver():
     """
     Load or create a RAG retriever.
@@ -102,6 +126,8 @@ def load_rag_retriver():
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
         print(f"📂 Created directory: {output_dir}")
+
+    download_drive_folder(DRIVE_FOLDER_ID, output_dir)
 
     if (
         os.path.exists(EMBEDDING_FILE)
