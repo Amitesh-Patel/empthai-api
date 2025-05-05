@@ -231,7 +231,7 @@ class StreamingTTSManager:
 
 
 # Helper functions
-def load_tts_model(provider_type="kokoro", **kwargs):
+def load_tts_model(provider_type="coqui", **kwargs):
     """Load a TTS model using the specified provider"""
     provider = TTSFactory.create_provider(provider_type, **kwargs)
     provider.load_model()
@@ -247,14 +247,10 @@ def text_to_speech(tts_provider, text, output_path):
 
 
 # Transcription functions
-def transcribe_audio(audio_path):
+def transcribe_audio(model, audio_path):
     """Transcribe audio file using Whisper"""
     try:
-        import time
-
-        time.sleep(0.5)
         # Load the Whisper model
-        model = whisper.load_model("base")
         print("Transcribing audio...", audio_path)
         # Transcribe the audio
         result = model.transcribe(audio_path)

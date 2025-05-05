@@ -14,6 +14,7 @@ import numpy as np
 import soundfile as sf
 import base64
 import torch
+import whisper
 
 
 # Import your existing utility functions
@@ -40,6 +41,7 @@ if not os.path.exists(TEMP_DIR):
 # Load models on startup
 tts_model = load_tts_model()
 rag_retriever = load_rag_retriver()
+wisper_model = whisper.load_model("base")
 
 from pydantic import BaseModel
 
@@ -97,7 +99,7 @@ async def transcribe_audio_endpoint(audio: UploadFile = File(...)):
 
         # Transcribe the audio
         start_time = time.time()
-        transcription = transcribe_audio(temp_audio_path)
+        transcription = transcribe_audio(wisper_model, temp_audio_path)
         transcription_time = time.time() - start_time
 
         if not transcription:
@@ -218,7 +220,7 @@ async def voice_chat_endpoint(
         session = active_sessions[session_id]
 
         # Transcribe the audio
-        transcription = transcribe_audio(temp_audio_path)
+        transcription = transcribe_audio(wisper_model, temp_audio_path)
         if not transcription:
             raise HTTPException(status_code=400, detail="Failed to transcribe audio")
 
@@ -303,7 +305,7 @@ async def stream_voice_chat(
         session.current_response = ""
 
         # Transcribe the audio
-        transcription = transcribe_audio(temp_audio_path)
+        transcription = transcribe_audio(wisper_model, temp_audio_path)
         if not transcription:
             raise HTTPException(status_code=400, detail="Failed to transcribe audio")
 
