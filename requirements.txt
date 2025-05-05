@@ -15,4 +15,4 @@ python-dotenv
 kokoro
 gdown
 python-multipart
-TTS
+coqui-tts

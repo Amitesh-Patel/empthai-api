@@ -41,7 +41,7 @@ class TTSProvider:
 
 # Coqui TTS Provider
 class CoquiTTSProvider(TTSProvider):
-    def __init__(self, model_name=TTS_MODEL_NAME, gpu=True):
+    def __init__(self, model_name=TTS_MODEL_NAME, gpu=False):
         super().__init__()
         self.model_name = model_name
         self.gpu = gpu
