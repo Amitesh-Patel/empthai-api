@@ -96,6 +96,13 @@ def load_rag_retriver():
         RAGRetriever: A retriever instance
     """
     # Load RAG components
+
+    # Ensure the output directory exists
+    output_dir = os.path.dirname(EMBEDDING_FILE)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"📂 Created directory: {output_dir}")
+
     if (
         os.path.exists(EMBEDDING_FILE)
         and os.path.exists(FAISS_INDEX_FILE)
