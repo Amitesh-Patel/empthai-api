@@ -14,3 +14,4 @@ python-dotenv
 # pyaudio
 kokoro
 gdown
+python-multipart
