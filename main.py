@@ -324,38 +324,60 @@ async def stream_voice_chat(
 
         # Function to process audio in the background
         async def process_audio_stream():
+            # Make sure we have asyncio imported
+            import asyncio
+
             # Get streaming response from LLM
             response_generator = stream_llm_response(transcription, context=context)
 
-            import re
+            # Use a smaller buffer for more responsive streaming
+            text_buffer = ""
 
-            sentence_buffer = ""
+            # Configure chunking parameters
+            min_chunk_size = 10  # Minimum characters to process at once
+            max_buffer_size = 50  # Don't let buffer grow too large
+
+            # Characters that make natural break points in speech
+            break_chars = [".", ",", "!", "?", ":", ";", " - ", "\n"]
 
             for chunk in response_generator:
                 if chunk and session.is_processing:
                     session.current_response += chunk
+                    text_buffer += chunk
 
-                    # Buffer text until we have complete sentences
-                    sentence_buffer += chunk
-                    print(f"Buffered text: {sentence_buffer}")
-                    # Check if we have complete sentences to process
-                    sentences = re.split(r"(?<=[.!?])\s+", sentence_buffer)
+                    # Process text when we have enough content or buffer is getting large
+                    if len(text_buffer) >= min_chunk_size or len(text_buffer) >= max_buffer_size:
+                        # Try to find a natural break point
+                        process_index = len(text_buffer)
 
-                    if len(sentences) > 1:  # We have at least one complete sentence
-                        complete_sentences = sentences[:-1]  # All but the last one
-                        sentence_buffer = sentences[-1]  # Keep the incomplete one for next time
+                        # Look for natural break points from end to start
+                        for char in break_chars:
+                            pos = text_buffer.rfind(char)
+                            if pos > min_chunk_size // 2:  # At least process some minimum text
+                                process_index = pos + 1  # Include the break character
+                                break
 
-                        for sentence in complete_sentences:
-                            if sentence.strip():
-                                # Generate audio for this sentence
-                                audio_data = session.tts_manager.process_chunk(sentence)
+                        # If no good break found and buffer is large, just process what we have
+                        if (
+                            process_index == len(text_buffer)
+                            and len(text_buffer) >= max_buffer_size
+                        ):
+                            process_index = len(text_buffer)
+
+                        # Only process if we have something meaningful
+                        if process_index > 0:
+                            text_to_process = text_buffer[:process_index].strip()
+                            text_buffer = text_buffer[process_index:]
+
+                            if text_to_process:
+                                print(f"Processing chunk: {text_to_process}")
+                                audio_data = session.tts_manager.process_chunk(text_to_process)
 
                                 if audio_data is not None and isinstance(audio_data, torch.Tensor):
                                     audio_data = audio_data.cpu().numpy()
 
                                 if audio_data is not None:
                                     # Convert to bytes if it's a numpy array
-
                                     if isinstance(audio_data, np.ndarray):
                                         audio_bytes_io = io.BytesIO()
                                         sf.write(
@@ -364,12 +386,20 @@ async def stream_voice_chat(
                                             session.tts_manager.sample_rate,
                                             format="wav",
                                         )
-                                        session.audio_chunks.append(audio_bytes_io.getvalue())
+                                        # Add to chunks and immediately make available
+                                        chunk_bytes = audio_bytes_io.getvalue()
+                                        session.audio_chunks.append(chunk_bytes)
+
+                                        # Small delay to ensure chunk is available in next poll
+                                        await asyncio.sleep(0.01)
 
             # Process any remaining text
-            if sentence_buffer and session.is_processing:
-                audio_data = session.tts_manager.process_chunk(sentence_buffer)
+            if text_buffer and session.is_processing:
+                audio_data = session.tts_manager.process_chunk(text_buffer)
                 if audio_data is not None:
+                    if isinstance(audio_data, torch.Tensor):
+                        audio_data = audio_data.cpu().numpy()
+
                     if isinstance(audio_data, np.ndarray):
                         audio_bytes_io = io.BytesIO()
                         sf.write(
@@ -411,7 +441,7 @@ async def stream_voice_chat(
 @app.get("/api/get_audio_chunks")
 async def get_audio_chunks(session_id: str):
     """
-    Get audio chunks for a streaming session.
+    Get audio chunks for a streaming session, optimized for immediate streaming.
     """
     try:
         if session_id not in active_sessions:
@@ -419,13 +449,14 @@ async def get_audio_chunks(session_id: str):
 
         session = active_sessions[session_id]
 
-        # Return any available chunks
+        # Return any available chunks immediately, don't wait for multiple chunks
         chunks = session.audio_chunks.copy()
 
         # Clear the chunks that we're returning
         if chunks:
             session.audio_chunks = []
 
+        # Return even if there's just one chunk
         return {
             "session_id": session_id,
             "chunks": len(chunks),

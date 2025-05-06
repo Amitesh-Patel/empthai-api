@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stream Voice Chat Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    button {
+      padding: 10px 15px;
+      margin: 10px 0;
+      cursor: pointer;
+    }
+    #status {
+      margin: 10px 0;
+      padding: 10px;
+      background-color: #f0f0f0;
+      border-radius: 5px;
+    }
+    #response {
+      margin: 10px 0;
+      padding: 10px;
+      background-color: #e6f7ff;
+      border-radius: 5px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Voice Chat Streaming Test</h1>
+  
+  <div>
+    <button id="startRecording">Start Recording</button>
+    <button id="stopRecording" disabled>Stop Recording</button>
+  </div>
+  
+  <div id="status">Status: Ready</div>
+  <div id="response"></div>
+
+  <script>
+    // Configuration
+    const API_URL = 'http://localhost:8000'; // Change this to your API URL
+    const CHUNK_POLLING_INTERVAL = 50; // ms - Much faster polling for immediate streaming
+
+    let mediaRecorder;
+    let audioChunks = [];
+    let sessionId = null;
+    let isPolling = false;
+    let audioContext;
+    let pollingInterval;
+
+    const startButton = document.getElementById('startRecording');
+    const stopButton = document.getElementById('stopRecording');
+    const statusDisplay = document.getElementById('status');
+    const responseDisplay = document.getElementById('response');
+
+    // Initialize audio context on user interaction
+    function initAudioContext() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    // Start recording audio
+    startButton.addEventListener('click', async () => {
+      initAudioContext();
+      
+      try {
+        // Request microphone access
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        
+        mediaRecorder.ondataavailable = (event) => {
+          audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.start();
+        
+        startButton.disabled = true;
+        stopButton.disabled = false;
+        statusDisplay.textContent = 'Status: Recording...';
+        responseDisplay.textContent = '';
+      } catch (err) {
+        statusDisplay.textContent = `Error: ${err.message}`;
+        console.error('Error accessing microphone:', err);
+      }
+    });
+
+    // Stop recording and send audio
+    stopButton.addEventListener('click', async () => {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        
+        // Wait for the last ondataavailable event
+        await new Promise(resolve => {
+          mediaRecorder.onstop = resolve;
+        });
+        
+        startButton.disabled = false;
+        stopButton.disabled = true;
+        statusDisplay.textContent = 'Status: Processing...';
+        
+        // Send the recorded audio
+        sendAudio();
+      }
+    });
+
+    // Send audio to the API
+    async function sendAudio() {
+      try {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.wav');
+        
+        if (sessionId) {
+          formData.append('session_id', sessionId);
+        }
+        
+        const response = await fetch(`${API_URL}/api/stream_voice_chat`, {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await response.json();
+        sessionId = data.session_id;
+        
+        statusDisplay.textContent = `Status: ${data.status}. Transcription: ${data.transcription}`;
+        
+        // Start polling for audio chunks
+        startPolling();
+      } catch (err) {
+        statusDisplay.textContent = `Error: ${err.message}`;
+        console.error('Error sending audio:', err);
+      }
+    }
+
+    // Start polling for audio chunks
+    function startPolling() {
+      if (isPolling) return;
+      
+      isPolling = true;
+      responseDisplay.textContent = '';
+      
+      pollingInterval = setInterval(fetchAudioChunks, CHUNK_POLLING_INTERVAL);
+    }
+
+    // Fetch audio chunks from the API
+    async function fetchAudioChunks() {
+      if (!sessionId) return;
+      
+      try {
+        const response = await fetch(`${API_URL}/api/get_audio_chunks?session_id=${sessionId}`);
+        const data = await response.json();
+        
+        // Update response text
+        responseDisplay.textContent = data.response_so_far;
+        
+        // Process audio chunks - even a single chunk should be played immediately
+        if (data.chunks > 0) {
+          for (const chunkBase64 of data.chunks_data) {
+            playAudioChunk(chunkBase64);
+          }
+          // Log that we received chunks for debugging
+          console.log(`Received ${data.chunks} audio chunk(s)`);
+        }
+        
+        // Stop polling if processing is complete
+        if (!data.is_processing) {
+          clearInterval(pollingInterval);
+          isPolling = false;
+          statusDisplay.textContent = 'Status: Complete';
+        }
+      } catch (err) {
+        console.error('Error fetching audio chunks:', err);
+        clearInterval(pollingInterval);
+        isPolling = false;
+        statusDisplay.textContent = `Error: ${err.message}`;
+      }
+    }
+
+    // Queue to manage audio chunks in order
+    const audioQueue = [];
+    let isPlaying = false;
+
+    // Play audio chunk
+    async function playAudioChunk(base64Data) {
+      try {
+        // Convert base64 to binary
+        const binaryString = atob(base64Data);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        // Create an audio buffer promise and add to queue
+        const bufferPromise = audioContext.decodeAudioData(bytes.buffer);
+        audioQueue.push(bufferPromise);
+        
+        // If not currently playing, start the queue
+        if (!isPlaying) {
+          playNextInQueue();
+        }
+      } catch (err) {
+        console.error('Error processing audio chunk:', err);
+      }
+    }
+
+    // Play next audio in queue
+    async function playNextInQueue() {
+      if (audioQueue.length === 0) {
+        isPlaying = false;
+        return;
+      }
+      
+      isPlaying = true;
+      
+      try {
+        // Get the next audio buffer
+        const audioBuffer = await audioQueue.shift();
+        
+        // Play the audio
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        
+        // When this chunk ends, play the next one
+        source.onended = playNextInQueue;
+        
+        source.start();
+      } catch (err) {
+        console.error('Error playing audio from queue:', err);
+        playNextInQueue(); // Continue with next item on error
+      }
+    }
+  </script>
+</body>
+</html>

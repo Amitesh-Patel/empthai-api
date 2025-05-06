@@ -127,7 +127,8 @@ def load_rag_retriver():
         os.makedirs(output_dir)
         print(f"📂 Created directory: {output_dir}")
 
-    download_drive_folder(DRIVE_FOLDER_ID, output_dir)
+    if not os.path.exists(EMBEDDING_FILE):
+        download_drive_folder(DRIVE_FOLDER_ID, output_dir)
 
     if (
         os.path.exists(EMBEDDING_FILE)

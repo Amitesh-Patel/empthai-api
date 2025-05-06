@@ -41,6 +41,7 @@ class Config:
 
 
 TEMP_DIR = os.path.join(os.getcwd(), "temp_recordings")
-# TTS_MODEL_NAME = "tts_models/en/ljspeech/glow-tts"
-TTS_MODEL_NAME = "tts_models/en/jenny/jenny"
-SAMPLE_RATE = 48000
+TTS_MODEL_NAME = "tts_models/en/ljspeech/glow-tts"
+# TTS_MODEL_NAME = "tts_models/en/jenny/jenny"
+# SAMPLE_RATE = 48000
+SAMPLE_RATE = 24000
