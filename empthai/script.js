@@ -8,6 +8,8 @@ const clearSessionBtn = document.getElementById('clearSessionBtn');
 const textInput = document.getElementById('textInput');
 const chatContainer = document.getElementById('chatContainer');
 const connectionStatus = document.getElementById('connectionStatus');
+const statusTooltip = document.getElementById('statusTooltip');
+const voiceIndicator = document.getElementById('voiceIndicator');
 
 // Variables
 let socket = null;
@@ -20,6 +22,8 @@ let audioQueue = [];
 let isPlaying = false;
 let streamingMessageElement = null;
 let currentStreamText = "";
+let audioAnalyser = null;
+let audioDataArray = null;
 
 // Generate a random client ID
 function generateClientId() {
@@ -39,25 +43,49 @@ function initAudioContext() {
 connectBtn.addEventListener('click', () => {
     clientId = generateClientId();
     
+    // Update UI to connecting state
+    connectionStatus.textContent = 'Connecting...';
+    connectionStatus.classList.add('processing');
+    statusTooltip.textContent = 'Establishing connection...';
+    
     // Create WebSocket connection
     socket = new WebSocket(`ws://localhost:8000/ws/${clientId}`);
     
     // Connection opened
     socket.addEventListener('open', (event) => {
         connectionStatus.textContent = 'Connected';
+        connectionStatus.classList.remove('processing');
         connectionStatus.classList.add('connected');
+        statusTooltip.textContent = 'Successfully connected to server';
+        
+        // Enable appropriate buttons
         connectBtn.disabled = true;
         disconnectBtn.disabled = false;
         sendTextBtn.disabled = false;
         startRecordingBtn.disabled = false;
         clearSessionBtn.disabled = false;
         
+        // Apply button transitions
+        const buttons = [disconnectBtn, sendTextBtn, startRecordingBtn, clearSessionBtn];
+        buttons.forEach(btn => {
+            btn.style.transition = 'opacity 0.3s ease';
+            btn.style.opacity = '1';
+        });
+        
         // Clear welcome message if it exists
         if (document.querySelector('.welcome-message')) {
-            chatContainer.innerHTML = '';
+            const welcome = document.querySelector('.welcome-message');
+            welcome.style.opacity = '0';
+            welcome.style.transform = 'translateY(-20px)';
+            
+            // Remove after animation completes
+            setTimeout(() => {
+                chatContainer.innerHTML = '';
+                addStatusMessage('Connected to server');
+            }, 300);
+        } else {
+            addStatusMessage('Connected to server');
         }
-        
-        addStatusMessage('Connected to server');
     });
     
     // Listen for messages
@@ -76,8 +104,17 @@ connectBtn.addEventListener('click', () => {
                     break;
                     
                 case 'text_response':
-                    // We'll get the full text response first, create a container for it
-                    // but the streaming audio will update it progressively
+                    // Create container with avatar for bot response
+                    const messageWithAvatar = document.createElement('div');
+                    messageWithAvatar.className = 'message-with-avatar';
+                    
+                    // Create avatar
+                    const avatar = document.createElement('div');
+                    avatar.className = 'bot-avatar';
+                    avatar.textContent = 'AI';
+                    messageWithAvatar.appendChild(avatar);
+                    
+                    // Create streaming message container
                     streamingMessageElement = document.createElement('div');
                     streamingMessageElement.className = 'streaming-message';
                     
@@ -90,8 +127,12 @@ connectBtn.addEventListener('click', () => {
                     currentStreamText = "";
                     streamingMessageElement.appendChild(document.createTextNode(""));
                     
-                    chatContainer.appendChild(streamingMessageElement);
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                    // Add to the message container
+                    messageWithAvatar.appendChild(streamingMessageElement);
+                    chatContainer.appendChild(messageWithAvatar);
+                    
+                    // Scroll to bottom with smooth animation
+                    smoothScrollToBottom();
                     break;
                     
                 case 'audio_response_chunk':
@@ -111,11 +152,21 @@ connectBtn.addEventListener('click', () => {
                             // Remove the streaming indicator
                             streamingMessageElement.removeChild(streamingMessageElement.firstChild);
                             streamingMessageElement.className = 'bot-message';
+                            
+                            // Add typing completion animation
+                            streamingMessageElement.style.transition = 'box-shadow 0.3s ease';
+                            streamingMessageElement.style.boxShadow = '0 4px 12px rgba(66, 133, 244, 0.2)';
+                            setTimeout(() => {
+                                if (streamingMessageElement) {
+                                    streamingMessageElement.style.boxShadow = '0 3px 8px rgba(0, 0, 0, 0.05)';
+                                }
+                            }, 300);
+                            
                             streamingMessageElement = null;
                             currentStreamText = "";
                         }
                         
-                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                        smoothScrollToBottom();
                     }
                     
                     // Play the audio chunk
@@ -148,10 +199,15 @@ connectBtn.addEventListener('click', () => {
                     
                 case 'error':
                     addStatusMessage(`Error: ${message.message}`);
+                    connectionStatus.classList.add('processing');
+                    setTimeout(() => {
+                        connectionStatus.classList.remove('processing');
+                    }, 1500);
                     break;
             }
         } catch (error) {
             console.error('Error processing message:', error);
+            addStatusMessage('Error processing server message');
         }
     });
     
@@ -159,12 +215,24 @@ connectBtn.addEventListener('click', () => {
     socket.addEventListener('close', (event) => {
         connectionStatus.textContent = 'Disconnected';
         connectionStatus.classList.remove('connected');
-        connectBtn.disabled = false;
+        connectionStatus.classList.remove('processing');
+        statusTooltip.textContent = 'Connect to start a conversation';
+        
+        // Disable appropriate buttons with fade out effect
         disconnectBtn.disabled = true;
         sendTextBtn.disabled = true;
         startRecordingBtn.disabled = true;
         stopRecordingBtn.disabled = true;
         clearSessionBtn.disabled = true;
+        
+        // Apply button transitions
+        const buttons = [disconnectBtn, sendTextBtn, startRecordingBtn, stopRecordingBtn, clearSessionBtn];
+        buttons.forEach(btn => {
+            btn.style.opacity = '0.6';
+        });
+        
+        connectBtn.disabled = false;
+        connectBtn.style.opacity = '1';
         
         addStatusMessage('Disconnected from server');
     });
@@ -173,14 +241,28 @@ connectBtn.addEventListener('click', () => {
     socket.addEventListener('error', (event) => {
         connectionStatus.textContent = 'Error';
         connectionStatus.classList.remove('connected');
+        connectionStatus.classList.add('processing');
+        statusTooltip.textContent = 'Connection error occurred';
+        
         addStatusMessage('Connection error');
         console.error('WebSocket error:', event);
+        
+        // Re-enable connect button after error
+        connectBtn.disabled = false;
     });
 });
 
 // Disconnect from WebSocket
 disconnectBtn.addEventListener('click', () => {
     if (socket) {
+        // Add visual feedback
+        connectionStatus.textContent = 'Disconnecting...';
+        connectionStatus.classList.add('processing');
+        connectionStatus.classList.remove('connected');
+        
+        addStatusMessage('Disconnecting...');
+        
+        // Close socket
         socket.close();
         socket = null;
     }
@@ -188,8 +270,23 @@ disconnectBtn.addEventListener('click', () => {
 
 // Send text message
 sendTextBtn.addEventListener('click', () => {
+    sendMessage();
+});
+
+// Handle Enter key in text input
+textInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+        sendMessage();
+    }
+});
+
+// Send message helper function
+function sendMessage() {
     const text = textInput.value.trim();
     if (text && socket && socket.readyState === WebSocket.OPEN) {
+        // Add visual feedback
+        sendTextBtn.classList.add('sending');
+        
         // Send text message
         const message = {
             type: 'text_input',
@@ -200,15 +297,13 @@ sendTextBtn.addEventListener('click', () => {
         socket.send(JSON.stringify(message));
         addUserMessage(text);
         textInput.value = '';
+        
+        // Remove visual feedback after a short delay
+        setTimeout(() => {
+            sendTextBtn.classList.remove('sending');
+        }, 300);
     }
-});
-
-// Handle Enter key in text input
-textInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-        sendTextBtn.click();
-    }
-});
+}
 
 // Start recording audio
 startRecordingBtn.addEventListener('click', async () => {
@@ -219,6 +314,9 @@ startRecordingBtn.addEventListener('click', async () => {
         
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
+        
+        // Set up audio visualization
+        setupAudioVisualization(stream);
         
         mediaRecorder.addEventListener('dataavailable', (event) => {
             audioChunks.push(event.data);
@@ -240,12 +338,28 @@ startRecordingBtn.addEventListener('click', async () => {
             isRecording = false;
             startRecordingBtn.disabled = false;
             stopRecordingBtn.disabled = true;
+            
+            // Hide voice visualization
+            voiceIndicator.style.display = 'none';
+            
+            // Clean up audio analysis
+            if (audioAnalyser) {
+                try {
+                    audioAnalyser.disconnect();
+                } catch (error) {
+                    console.log('Analyser already disconnected');
+                }
+            }
         });
         
         mediaRecorder.start();
         isRecording = true;
         startRecordingBtn.disabled = true;
         stopRecordingBtn.disabled = false;
+        
+        // Show voice visualization
+        voiceIndicator.style.display = 'flex';
+        
         addStatusMessage('Recording started');
         
     } catch (error) {
@@ -254,24 +368,88 @@ startRecordingBtn.addEventListener('click', async () => {
     }
 });
 
+// Setup audio visualization for more dynamic voice activity display
+function setupAudioVisualization(stream) {
+    const ctx = initAudioContext();
+    const source = ctx.createMediaStreamSource(stream);
+    audioAnalyser = ctx.createAnalyser();
+    audioAnalyser.fftSize = 32;
+    
+    const bufferLength = audioAnalyser.frequencyBinCount;
+    audioDataArray = new Uint8Array(bufferLength);
+    
+    source.connect(audioAnalyser);
+    
+    // Update voice bars
+    function updateVoiceVisualization() {
+        if (!isRecording) return;
+        
+        audioAnalyser.getByteFrequencyData(audioDataArray);
+        
+        // Get average level
+        let total = 0;
+        for (let i = 0; i < audioDataArray.length; i++) {
+            total += audioDataArray[i];
+        }
+        const average = total / audioDataArray.length;
+        
+        // Update voice bars
+        const voiceBars = document.querySelectorAll('.voice-bar');
+        voiceBars.forEach((bar, index) => {
+            // Use a combination of the data point and random variation
+            const value = Math.min(100, (audioDataArray[index % audioDataArray.length] / 2) + (average / 4) + (Math.random() * 15));
+            bar.style.height = `${value * 0.2}px`;
+        });
+        
+        requestAnimationFrame(updateVoiceVisualization);
+    }
+    
+    updateVoiceVisualization();
+}
+
 // Stop recording audio
 stopRecordingBtn.addEventListener('click', () => {
     if (mediaRecorder && isRecording) {
+        // Add visual feedback
+        stopRecordingBtn.classList.add('stopping');
+        
         mediaRecorder.stop();
         addStatusMessage('Recording stopped');
+        
+        // Remove visual feedback after a short delay
+        setTimeout(() => {
+            stopRecordingBtn.classList.remove('stopping');
+        }, 300);
     }
 });
 
 // Clear session
 clearSessionBtn.addEventListener('click', () => {
     if (socket && socket.readyState === WebSocket.OPEN) {
+        // Add visual feedback
+        clearSessionBtn.classList.add('clearing');
+        
         const message = {
             type: 'clear_session'
         };
         
         socket.send(JSON.stringify(message));
-        chatContainer.innerHTML = '';
-        addStatusMessage('Session cleared');
+        
+        // Fade out existing messages
+        const messages = chatContainer.querySelectorAll('.user-message, .bot-message, .status-message, .message-with-avatar');
+        messages.forEach(msg => {
+            msg.style.transition = 'opacity 0.3s ease';
+            msg.style.opacity = '0';
+        });
+        
+        // Clear after animation completes
+        setTimeout(() => {
+            chatContainer.innerHTML = '';
+            addStatusMessage('Session cleared');
+            
+            // Remove visual feedback
+            clearSessionBtn.classList.remove('clearing');
+        }, 300);
     }
 });
 
@@ -303,29 +481,115 @@ async function playNextAudio() {
     }
 }
 
-// Add message to chat
+// Add message to chat with improved animations
 function addUserMessage(text) {
     const messageDiv = document.createElement('div');
     messageDiv.className = 'user-message';
     messageDiv.textContent = text;
+    
+    // Add appear animation
+    messageDiv.style.opacity = '0';
+    messageDiv.style.transform = 'translateY(10px)';
+    
     chatContainer.appendChild(messageDiv);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Trigger animation
+    setTimeout(() => {
+        messageDiv.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        messageDiv.style.opacity = '1';
+        messageDiv.style.transform = 'translateY(0)';
+    }, 10);
+    
+    smoothScrollToBottom();
 }
 
 function addBotMessage(text) {
+    // Create container with avatar
+    const messageWithAvatar = document.createElement('div');
+    messageWithAvatar.className = 'message-with-avatar';
+    
+    // Create avatar
+    const avatar = document.createElement('div');
+    avatar.className = 'bot-avatar';
+    avatar.textContent = 'AI';
+    messageWithAvatar.appendChild(avatar);
+    
+    // Create message
     const messageDiv = document.createElement('div');
     messageDiv.className = 'bot-message';
     messageDiv.textContent = text;
-    chatContainer.appendChild(messageDiv);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Add appear animation
+    messageDiv.style.opacity = '0';
+    messageDiv.style.transform = 'translateY(10px)';
+    
+    messageWithAvatar.appendChild(messageDiv);
+    chatContainer.appendChild(messageWithAvatar);
+    
+    // Trigger animation
+    setTimeout(() => {
+        messageDiv.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        messageDiv.style.opacity = '1';
+        messageDiv.style.transform = 'translateY(0)';
+    }, 10);
+    
+    smoothScrollToBottom();
 }
 
 function addStatusMessage(text) {
     const messageDiv = document.createElement('div');
     messageDiv.className = 'status-message';
     messageDiv.textContent = text;
+    
+    // Add appear animation
+    messageDiv.style.opacity = '0';
+    
     chatContainer.appendChild(messageDiv);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Trigger animation
+    setTimeout(() => {
+        messageDiv.style.transition = 'opacity 0.3s ease';
+        messageDiv.style.opacity = '1';
+    }, 10);
+    
+    smoothScrollToBottom();
+}
+
+// Smooth scrolling to bottom of chat
+function smoothScrollToBottom() {
+    const scrollHeight = chatContainer.scrollHeight;
+    const currentScroll = chatContainer.scrollTop;
+    const targetScroll = scrollHeight - chatContainer.clientHeight;
+    const distance = targetScroll - currentScroll;
+    
+    // If already at bottom or very close, just jump to bottom
+    if (distance < 50) {
+        chatContainer.scrollTop = scrollHeight;
+        return;
+    }
+    
+    // Otherwise animate the scroll
+    const duration = 300; // ms
+    const startTime = performance.now();
+    
+    function scrollStep(timestamp) {
+        const elapsed = timestamp - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeProgress = easeOutCubic(progress);
+        
+        chatContainer.scrollTop = currentScroll + (distance * easeProgress);
+        
+        if (progress < 1) {
+            requestAnimationFrame(scrollStep);
+        }
+    }
+    
+    requestAnimationFrame(scrollStep);
+}
+
+// Easing function for smoother animation
+function easeOutCubic(x) {
+    return 1 - Math.pow(1 - x, 3);
 }
 
 // Initialize tooltips for buttons
@@ -336,7 +600,22 @@ function initTooltips() {
     });
 }
 
+// Add input focus effects
+function setupInputEffects() {
+    textInput.addEventListener('focus', () => {
+        textInput.parentElement.classList.add('input-focused');
+    });
+    
+    textInput.addEventListener('blur', () => {
+        textInput.parentElement.classList.remove('input-focused');
+    });
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
     initTooltips();
+    setupInputEffects();
+    
+    // Add CSS class for input container
+    document.querySelector('.input-container').classList.add('input-container-ready');
 });
