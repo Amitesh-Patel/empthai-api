@@ -60,7 +60,8 @@ def get_llm_response(user_input, context=None):
         return response.text
 
     except Exception as e:
-        return f"Error getting LLM response: {e}"
+        # return f"Error getting LLM response: {e}"
+        return context
 
 
 def stream_llm_response(user_input, context=None):

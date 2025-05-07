@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmpathAI Voice Chat Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .button-row {
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #4285f4;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #3367d6;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #textInput {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            max-width: 70%;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        .bot-message {
+            background-color: #f1f1f1;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            max-width: 70%;
+        }
+        .streaming-message {
+            background-color: #f1f1f1;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            max-width: 70%;
+            border-left: 3px solid #4285f4;
+        }
+        .status-message {
+            font-style: italic;
+            color: #666;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        #connectionStatus {
+            margin-bottom: 10px;
+            color: #666;
+        }
+        .stream-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #4285f4;
+            border-radius: 50%;
+            margin-right: 5px;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>EmpathAI Voice Chat</h1>
+        <div id="connectionStatus">Disconnected</div>
+        <div id="chatContainer" class="chat-container"></div>
+        <div class="controls">
+            <input type="text" id="textInput" placeholder="Type a message..." />
+            <div class="button-row">
+                <button id="connectBtn">Connect</button>
+                <button id="disconnectBtn" disabled>Disconnect</button>
+                <button id="sendTextBtn" disabled>Send Text</button>
+                <button id="startRecordingBtn" disabled>Start Recording</button>
+                <button id="stopRecordingBtn" disabled>Stop Recording</button>
+                <button id="clearSessionBtn" disabled>Clear Session</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const sendTextBtn = document.getElementById('sendTextBtn');
+        const startRecordingBtn = document.getElementById('startRecordingBtn');
+        const stopRecordingBtn = document.getElementById('stopRecordingBtn');
+        const clearSessionBtn = document.getElementById('clearSessionBtn');
+        const textInput = document.getElementById('textInput');
+        const chatContainer = document.getElementById('chatContainer');
+        const connectionStatus = document.getElementById('connectionStatus');
+
+        // Variables
+        let socket = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let clientId = null;
+        let isRecording = false;
+        let audioContext = null;
+        let audioQueue = [];
+        let isPlaying = false;
+        let streamingMessageElement = null;
+        let currentStreamText = "";
+
+        // Generate a random client ID
+        function generateClientId() {
+            return 'client_' + Math.random().toString(36).substring(2, 15);
+        }
+
+        // Initialize audio context
+        function initAudioContext() {
+            // Create AudioContext when needed (to avoid autoplay policy issues)
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioContext;
+        }
+
+        // Connect to WebSocket
+        connectBtn.addEventListener('click', () => {
+            clientId = generateClientId();
+            
+            // Create WebSocket connection
+            socket = new WebSocket(`ws://localhost:8000/ws/${clientId}`);
+            
+            // Connection opened
+            socket.addEventListener('open', (event) => {
+                connectionStatus.textContent = 'Connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendTextBtn.disabled = false;
+                startRecordingBtn.disabled = false;
+                clearSessionBtn.disabled = false;
+                
+                addStatusMessage('Connected to server');
+            });
+            
+            // Listen for messages
+            socket.addEventListener('message', async (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    console.log('Message from server:', message);
+                    
+                    switch (message.type) {
+                        case 'status':
+                            addStatusMessage(`Status: ${message.status}`);
+                            break;
+                            
+                        case 'transcription':
+                            addUserMessage(`(Transcribed) ${message.text}`);
+                            break;
+                            
+                        case 'text_response':
+                            // We'll get the full text response first, create a container for it
+                            // but the streaming audio will update it progressively
+                            streamingMessageElement = document.createElement('div');
+                            streamingMessageElement.className = 'streaming-message';
+                            
+                            // Add a streaming indicator
+                            const indicator = document.createElement('span');
+                            indicator.className = 'stream-indicator';
+                            streamingMessageElement.appendChild(indicator);
+                            
+                            // Initialize with empty content that will be filled by chunks
+                            currentStreamText = "";
+                            streamingMessageElement.appendChild(document.createTextNode(""));
+                            
+                            chatContainer.appendChild(streamingMessageElement);
+                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                            break;
+                            
+                        case 'audio_response_chunk':
+                            // Update the streaming message with the new chunk
+                            currentStreamText += message.text;
+                            
+                            // If this is the first or ongoing chunk, update the streaming message
+                            if (streamingMessageElement) {
+                                // Remove previous content and update
+                                while (streamingMessageElement.childNodes.length > 1) {
+                                    streamingMessageElement.removeChild(streamingMessageElement.lastChild);
+                                }
+                                streamingMessageElement.appendChild(document.createTextNode(currentStreamText));
+                                
+                                // If this is the last chunk, convert to regular bot message
+                                if (message.end) {
+                                    // Remove the streaming indicator
+                                    streamingMessageElement.removeChild(streamingMessageElement.firstChild);
+                                    streamingMessageElement.className = 'bot-message';
+                                    streamingMessageElement = null;
+                                    currentStreamText = "";
+                                }
+                                
+                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                            }
+                            
+                            // Play the audio chunk
+                            const audioData = atob(message.audio);
+                            const arrayBuffer = new ArrayBuffer(audioData.length);
+                            const view = new Uint8Array(arrayBuffer);
+                            for (let i = 0; i < audioData.length; i++) {
+                                view[i] = audioData.charCodeAt(i);
+                            }
+                            
+                            // Add to queue and play
+                            audioQueue.push(arrayBuffer);
+                            playNextAudio();
+                            break;
+                            
+                        case 'audio_response':
+                            // Handle legacy non-chunked audio (for backward compatibility)
+                            const legacyAudioData = atob(message.audio);
+                            const legacyArrayBuffer = new ArrayBuffer(legacyAudioData.length);
+                            const legacyView = new Uint8Array(legacyArrayBuffer);
+                            for (let i = 0; i < legacyAudioData.length; i++) {
+                                legacyView[i] = legacyAudioData.charCodeAt(i);
+                            }
+                            
+                            // Add to queue and play
+                            audioQueue.push(legacyArrayBuffer);
+                            playNextAudio();
+                            break;
+                            
+                        case 'error':
+                            addStatusMessage(`Error: ${message.message}`);
+                            break;
+                    }
+                } catch (error) {
+                    console.error('Error processing message:', error);
+                }
+            });
+            
+            // Connection closed
+            socket.addEventListener('close', (event) => {
+                connectionStatus.textContent = 'Disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendTextBtn.disabled = true;
+                startRecordingBtn.disabled = true;
+                stopRecordingBtn.disabled = true;
+                clearSessionBtn.disabled = true;
+                
+                addStatusMessage('Disconnected from server');
+            });
+            
+            // Connection error
+            socket.addEventListener('error', (event) => {
+                connectionStatus.textContent = 'Error';
+                addStatusMessage('Connection error');
+                console.error('WebSocket error:', event);
+            });
+        });
+
+        // Disconnect from WebSocket
+        disconnectBtn.addEventListener('click', () => {
+            if (socket) {
+                socket.close();
+                socket = null;
+            }
+        });
+
+        // Send text message
+        sendTextBtn.addEventListener('click', () => {
+            const text = textInput.value.trim();
+            if (text && socket && socket.readyState === WebSocket.OPEN) {
+                // Send text message
+                const message = {
+                    type: 'text_input',
+                    text: text,
+                    use_rag: true
+                };
+                
+                socket.send(JSON.stringify(message));
+                addUserMessage(text);
+                textInput.value = '';
+            }
+        });
+
+        // Handle Enter key in text input
+        textInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                sendTextBtn.click();
+            }
+        });
+
+        // Start recording audio
+        startRecordingBtn.addEventListener('click', async () => {
+            if (isRecording) return;
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.addEventListener('dataavailable', (event) => {
+                    audioChunks.push(event.data);
+                });
+                
+                mediaRecorder.addEventListener('stop', async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    
+                    // Send audio data to server
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            socket.send(reader.result);
+                            addStatusMessage('Audio sent to server');
+                        };
+                        reader.readAsArrayBuffer(audioBlob);
+                    }
+                    
+                    isRecording = false;
+                    startRecordingBtn.disabled = false;
+                    stopRecordingBtn.disabled = true;
+                });
+                
+                mediaRecorder.start();
+                isRecording = true;
+                startRecordingBtn.disabled = true;
+                stopRecordingBtn.disabled = false;
+                addStatusMessage('Recording started');
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                addStatusMessage('Error accessing microphone');
+            }
+        });
+
+        // Stop recording audio
+        stopRecordingBtn.addEventListener('click', () => {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                addStatusMessage('Recording stopped');
+            }
+        });
+
+        // Clear session
+        clearSessionBtn.addEventListener('click', () => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'clear_session'
+                };
+                
+                socket.send(JSON.stringify(message));
+                chatContainer.innerHTML = '';
+                addStatusMessage('Session cleared');
+            }
+        });
+
+        // Play the next audio in queue
+        async function playNextAudio() {
+            if (isPlaying || audioQueue.length === 0) return;
+            
+            isPlaying = true;
+            const ctx = initAudioContext();
+            
+            try {
+                const arrayBuffer = audioQueue.shift();
+                const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+                
+                const source = ctx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(ctx.destination);
+                
+                source.onended = () => {
+                    isPlaying = false;
+                    playNextAudio(); // Play next in queue if any
+                };
+                
+                source.start(0);
+            } catch (error) {
+                console.error('Error playing audio:', error);
+                isPlaying = false;
+                playNextAudio(); // Try next one
+            }
+        }
+
+        // Add message to chat
+        function addUserMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'user-message';
+            messageDiv.textContent = text;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addBotMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'bot-message';
+            messageDiv.textContent = text;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addStatusMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'status-message';
+            messageDiv.textContent = text;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    </script>
+</body>
+</html>

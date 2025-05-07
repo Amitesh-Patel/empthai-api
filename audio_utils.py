@@ -231,7 +231,7 @@ class StreamingTTSManager:
 
 
 # Helper functions
-def load_tts_model(provider_type="coqui", **kwargs):
+def load_tts_model(provider_type="kokoro", **kwargs):
     """Load a TTS model using the specified provider"""
     provider = TTSFactory.create_provider(provider_type, **kwargs)
     provider.load_model()
